@@ -63,6 +63,8 @@ pub(crate) struct AppConfig {
     pub(crate) nodes: Vec<Node>,
     pub(crate) id: String,
     pub(crate) interval: u64,
+    pub(crate) skip_before: u64,
+    pub(crate) steal_since: u64,
 }
 
 impl<'a> From<&'a ArgMatches<'a>> for AppConfig {
@@ -70,10 +72,14 @@ impl<'a> From<&'a ArgMatches<'a>> for AppConfig {
         let nodes = values_t!(matches, "nodes", Node).unwrap_or_else(|e| e.exit());
         let id = value_t!(matches, "id", String).unwrap_or_else(|e| e.exit());
         let interval = value_t!(matches, "interval", u64).unwrap_or_else(|e| e.exit());
+        let skip_before = value_t!(matches, "skip-before", u64).unwrap_or_else(|e| e.exit());
+        let steal_since = value_t!(matches, "steal-since", u64).unwrap_or_else(|e| e.exit());
         Self {
             nodes,
             id,
             interval,
+            skip_before,
+            steal_since,
         }
     }
 }
@@ -87,6 +93,8 @@ impl fmt::Display for AppConfig {
         }
         ret.push_str(&format!("    id: {}\n", self.id));
         ret.push_str(&format!("    interval: {}\n", self.interval));
+        ret.push_str(&format!("    skip-before: {}\n", self.skip_before));
+        ret.push_str(&format!("    steal-since: {}\n", self.steal_since));
         ret += "}}\n";
         write!(f, "{}", ret)
     }
@@ -100,7 +108,6 @@ pub(crate) fn build_commandline<'a>() -> App<'a, 'a> {
         .arg(
             Arg::with_name("nodes")
                 .long("nodes")
-                .short("N")
                 .required(true)
                 .takes_value(true)
                 .multiple(true)
@@ -110,7 +117,6 @@ pub(crate) fn build_commandline<'a>() -> App<'a, 'a> {
         .arg(
             Arg::with_name("id")
                 .long("id")
-                .short("i")
                 .required(true)
                 .takes_value(true)
                 .help(
@@ -121,13 +127,28 @@ pub(crate) fn build_commandline<'a>() -> App<'a, 'a> {
         .arg(
             Arg::with_name("interval")
                 .long("interval")
-                .short("t")
                 .takes_value(true)
                 .default_value("500")
                 .help(
                     "Wait interval millisecond between sending each batch of requests. \
                      0 means no wait.",
                 ),
+        )
+        .arg(
+            Arg::with_name("skip-before")
+                .long("skip-before")
+                .takes_value(true)
+                .default_value("0")
+                .help(
+                    "Skip synchronizing blocks whose height is smaller than the provided height.",
+                ),
+        )
+        .arg(
+            Arg::with_name("steal-since")
+                .long("steal-since")
+                .takes_value(true)
+                .default_value("0")
+                .help("Steal capacity from always success since the provided height."),
         )
 }
 

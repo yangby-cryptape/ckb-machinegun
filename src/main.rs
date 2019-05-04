@@ -50,6 +50,13 @@ fn main() {
     storage.init().unwrap();
     let screen = Screen::new();
 
+    if config.skip_before != 0 {
+        storage.update_chain_status(config.skip_before, 0).unwrap();
+    }
+    if config.steal_since != 0 {
+        storage.update_stolen_status(config.steal_since).unwrap();
+    }
+
     refresh_status(Arc::clone(&sync_client), &screen, Arc::clone(&storage));
 
     steal_capacity(
