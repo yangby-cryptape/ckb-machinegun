@@ -13,6 +13,8 @@ use rusqlite::{Connection, Result, NO_PARAMS};
 
 use ckb_jsonrpc_interfaces::{core, types, H256};
 
+use crate::utils;
+
 pub(crate) struct Storage {
     conn: Mutex<Connection>,
 }
@@ -33,6 +35,7 @@ impl Storage {
     where
         F: FnOnce(&Connection) -> Result<T>,
     {
+        // TODO Bottleneck: stupid but works.
         let wait_time = ::std::time::Duration::from_secs(60 * 60 * 24);
         let conn = self.conn.try_lock_for(wait_time).unwrap();
         func(&conn)
@@ -73,6 +76,7 @@ impl Storage {
                     tx_hash     CHAR(64)                    NOT NULL,
                     index_      INTEGER                     NOT NULL,
                     capacity    INTEGER                     NOT NULL,
+                    batch_ts    INTEGER,
                     PRIMARY KEY (tx_hash, index_)
                 );
 
@@ -268,23 +272,15 @@ impl Storage {
 
     pub(crate) fn fetch_unspent_cells(
         &self,
-        limit: u32,
+        batch_ts: u64,
     ) -> Result<Vec<(core::transaction::CellInput, u64)>> {
         let stmt = r#"
-            SELECT cc.tx_hash, cc.index_, cc.capacity
-              FROM stolen_transactions st
-         LEFT JOIN chain_cells cc
-                ON st.hash = cc.tx_hash
-             WHERE cc.capacity is not null
-               AND NOT EXISTS (
-                SELECT 1
-                  FROM transactions t
-                 WHERE cc.tx_hash = t.tx_hash
-                   AND cc.index_ = t.index_)
-             LIMIT :limit;"#;
+            SELECT tx_hash, index_, capacity
+              FROM chain_cells
+             WHERE batch_ts = :batch_ts;"#;
         self.execute(|conn| {
             let mut stmt = conn.prepare(stmt)?;
-            let mut rows = stmt.query_named(&[(":limit", &limit)])?;
+            let mut rows = stmt.query_named(&[(":batch_ts", &(batch_ts as i64))])?;
             let mut inputs = Vec::new();
             while let Some(row) = rows.next()? {
                 let h: String = row.get(0).unwrap();
@@ -303,18 +299,42 @@ impl Storage {
         })
     }
 
-    pub(crate) fn count_unspent_cells(&self) -> Result<u64> {
+    pub(crate) fn create_unspent_cells_batch(&self) -> Result<u64> {
+        let batch_ts = utils::timestamp_secs();
         let stmt = r#"
-            SELECT count(1)
-              FROM stolen_transactions st
-         LEFT JOIN chain_cells cc
-                ON st.hash = cc.tx_hash
-             WHERE cc.capacity is not null
+            UPDATE chain_cells
+               SET batch_ts = :batch_ts
+             WHERE chain_cells.batch_ts is null
+               AND EXISTS (
+                SELECT 1
+                  FROM stolen_transactions st
+                 WHERE st.hash = chain_cells.tx_hash)
                AND NOT EXISTS (
                 SELECT 1
                   FROM transactions t
-                 WHERE cc.tx_hash = t.tx_hash
-                   AND cc.index_ = t.index_);"#;
+                 WHERE t.tx_hash = chain_cells.tx_hash
+                   AND t.index_ = chain_cells.index_);"#;
+        self.execute(move |conn| {
+            conn.prepare(stmt)?
+                .execute_named(&[(":batch_ts", &(batch_ts as i64))])
+                .map(|_| batch_ts)
+        })
+    }
+
+    pub(crate) fn count_unspent_cells(&self) -> Result<u64> {
+        let stmt = r#"
+            SELECT count(1)
+              FROM chain_cells cc
+             WHERE batch_ts is null
+               AND EXISTS (
+                SELECT 1
+                  FROM stolen_transactions st
+                 WHERE st.hash = cc.tx_hash)
+               AND NOT EXISTS (
+                SELECT 1
+                  FROM transactions t
+                 WHERE t.tx_hash = cc.tx_hash
+                   AND t.index_ = cc.index_);"#;
         self.execute(|conn| {
             conn.query_row::<i64, _, _>(stmt, NO_PARAMS, |r| r.get(0))
                 .map(|x| x as u64)

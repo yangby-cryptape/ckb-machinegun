@@ -60,25 +60,29 @@ impl fmt::Display for ParseNodeError {
 }
 
 pub(crate) struct AppConfig {
-    pub(crate) node: Vec<Node>,
+    pub(crate) nodes: Vec<Node>,
     pub(crate) id: String,
     pub(crate) interval: u64,
 }
 
 impl<'a> From<&'a ArgMatches<'a>> for AppConfig {
     fn from(matches: &'a ArgMatches) -> Self {
-        let node = values_t!(matches, "node", Node).unwrap_or_else(|e| e.exit());
+        let nodes = values_t!(matches, "nodes", Node).unwrap_or_else(|e| e.exit());
         let id = value_t!(matches, "id", String).unwrap_or_else(|e| e.exit());
         let interval = value_t!(matches, "interval", u64).unwrap_or_else(|e| e.exit());
-        Self { node, id, interval }
+        Self {
+            nodes,
+            id,
+            interval,
+        }
     }
 }
 
 impl fmt::Display for AppConfig {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut ret = "\nAppConfig: {{\n".to_string();
-        ret.push_str(&format!("    node[{}]:\n", self.node.len()));
-        for node in self.node.iter() {
+        ret.push_str(&format!("    nodes[{}]:\n", self.nodes.len()));
+        for node in self.nodes.iter() {
             ret.push_str(&format!("        {}\n", node));
         }
         ret.push_str(&format!("    id: {}\n", self.id));
@@ -94,16 +98,14 @@ pub(crate) fn build_commandline<'a>() -> App<'a, 'a> {
         .author("Boyu Yang <yangby@cryptape.com>")
         .about("A Machine Gun for attacking CKB through JSON-RPC.")
         .arg(
-            Arg::with_name("node")
-                .long("node")
+            Arg::with_name("nodes")
+                .long("nodes")
                 .short("N")
                 .required(true)
                 .takes_value(true)
-                // TODO multi nodes
-                //  .multiple(true)
-                //  .value_delimiter(",")
-                //  .help("Set the host:port[,host:port[...]] of nodes to send transactions."),
-                .help("Set the host:port of nodes to send transactions."),
+                .multiple(true)
+                .value_delimiter(",")
+                .help("Set the host:port[,host:port[...]] of nodes to send transactions."),
         )
         .arg(
             Arg::with_name("id")
@@ -122,7 +124,10 @@ pub(crate) fn build_commandline<'a>() -> App<'a, 'a> {
                 .short("t")
                 .takes_value(true)
                 .default_value("500")
-                .help("Wait interval millisecond between sending each request. 0 means no wait."),
+                .help(
+                    "Wait interval millisecond between sending each batch of requests. \
+                     0 means no wait.",
+                ),
         )
 }
 

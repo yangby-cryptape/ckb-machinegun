@@ -17,3 +17,10 @@ pub(crate) fn sleep_secs(secs: u64) {
     let wait_secs = time::Duration::from_secs(secs);
     thread::sleep(wait_secs);
 }
+
+pub(crate) fn timestamp_secs() -> u64 {
+    time::SystemTime::now()
+        .duration_since(time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}

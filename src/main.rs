@@ -9,32 +9,34 @@
 #[macro_use]
 extern crate clap;
 
-mod client;
+mod async_client;
 mod config;
 mod screen;
 mod storage;
+mod sync_client;
 mod utils;
 
 use std::{sync::Arc, thread};
 
-use ckb_jsonrpc_client::sync::CkbClient;
+use ckb_jsonrpc_client::sync::CkbClient as CkbSyncClient;
 use ckb_jsonrpc_interfaces::{bytes, core, h256, types, H256};
 
-use client::CkbClientPlus;
+use async_client::CkbClient as CkbAsyncMultiRemotesClient;
 use config::{build_commandline, parse_arguments};
 use screen::Screen;
 use storage::Storage;
+use sync_client::CkbClientPlus as _;
 
 const SAFE_NUMBER_INTERVAL: u64 = 10;
-const LEAST_UNSPENT_CELLS_COUNT: u64 = 500;
 const MOST_UNSPENT_CELLS_COUNT: u64 = 50000;
 
 fn main() {
     let matches = build_commandline().get_matches();
     let config = parse_arguments(matches);
-    let url = format!("http://{}:{}", config.node[0].host, config.node[0].port);
+    let url = format!("http://{}:{}", config.nodes[0].host, config.nodes[0].port);
     let path = format!("{}.db", config.id);
     let interval = config.interval;
+
     let succ_lock = core::script::Script::new(Vec::new(), h256!("0x1"));
     let my_lock = core::script::Script::new(
         vec![bytes::Bytes::from(&config.id.into_bytes()[..])],
@@ -42,15 +44,16 @@ fn main() {
     );
 
     Screen::clear().unwrap();
-    let client = Arc::new(CkbClient::new(&url));
+    let sync_client = Arc::new(CkbSyncClient::new(&url));
+    let async_client = Arc::new(CkbAsyncMultiRemotesClient::new(&config.nodes[1..]));
     let storage = Storage::open(&path).expect("failed to open database");
     storage.init().unwrap();
     let screen = Screen::new();
 
-    refresh_status(Arc::clone(&client), &screen, Arc::clone(&storage));
+    refresh_status(Arc::clone(&sync_client), &screen, Arc::clone(&storage));
 
     steal_capacity(
-        Arc::clone(&client),
+        Arc::clone(&sync_client),
         &screen,
         Arc::clone(&storage),
         succ_lock.clone(),
@@ -60,7 +63,7 @@ fn main() {
     check_cells(&screen, Arc::clone(&storage));
 
     send_transactions(
-        Arc::clone(&client),
+        Arc::clone(&async_client),
         &screen,
         Arc::clone(&storage),
         my_lock.clone(),
@@ -72,17 +75,17 @@ fn main() {
     let _ = screen.join_and_clear();
 }
 
-fn refresh_status(client: Arc<CkbClient>, screen: &Screen, storage: Arc<Storage>) {
+fn refresh_status(sync_client: Arc<CkbSyncClient>, screen: &Screen, storage: Arc<Storage>) {
     let tip_block_number = screen.tip_block_number();
     let sync_status = screen.sync_status();
     {
-        let number = client.tip_block_number().unwrap();
+        let number = sync_client.tip_block_number().unwrap();
         storage.update_turn_status(number).unwrap();
     }
     let _ = thread::spawn(move || {
         let mut current_number = 0;
         loop {
-            if let Ok(number) = client.tip_block_number() {
+            if let Ok(number) = sync_client.tip_block_number() {
                 tip_block_number.set_message(&format!("Current: #{}", number));
                 tip_block_number.tick();
                 if current_number != number {
@@ -113,7 +116,9 @@ fn refresh_status(client: Arc<CkbClient>, screen: &Screen, storage: Arc<Storage>
                         break;
                     }
                     cnt -= 1;
-                    let block = client.block_by_number(Some(chain_number_next)).unwrap();
+                    let block = sync_client
+                        .block_by_number(Some(chain_number_next))
+                        .unwrap();
                     let timestamp = block.header.inner.timestamp.parse::<u64>().unwrap();
                     let tx_cells = block
                         .transactions
@@ -169,7 +174,7 @@ fn refresh_status(client: Arc<CkbClient>, screen: &Screen, storage: Arc<Storage>
 }
 
 fn steal_capacity(
-    client: Arc<CkbClient>,
+    sync_client: Arc<CkbSyncClient>,
     screen: &Screen,
     storage: Arc<Storage>,
     lock_in: core::script::Script,
@@ -205,7 +210,7 @@ fn steal_capacity(
             }
             stolen_status.tick();
             stolen_status.set_message(&format!("Stealing cells from #{}", stolen_number));
-            let tx_opt_res = client.steal(
+            let tx_opt_res = sync_client.steal(
                 &lock_in,
                 &lock_out,
                 Some(stolen_number),
@@ -214,7 +219,7 @@ fn steal_capacity(
             );
             if let Ok(tx_opt) = tx_opt_res {
                 if let Some(tx) = tx_opt {
-                    if let Ok(tx_hash) = client.send(tx) {
+                    if let Ok(tx_hash) = sync_client.send(tx) {
                         storage
                             .save_stolen_transaction(stolen_number, tx_hash.clone())
                             .unwrap();
@@ -261,43 +266,69 @@ fn check_cells(screen: &Screen, storage: Arc<Storage>) {
 }
 
 fn send_transactions(
-    client: Arc<CkbClient>,
+    async_client: Arc<CkbAsyncMultiRemotesClient>,
     screen: &Screen,
     storage: Arc<Storage>,
     lock: core::script::Script,
     interval: u64,
 ) {
-    let sent_count = screen.sent_count();
+    let storage_sender = {
+        let storage_async = Arc::clone(&storage);
+        let (sender, receiver) = ::crossbeam::channel::unbounded();
+        let _ = thread::spawn(move || loop {
+            if let Ok((h, i, tx_hash)) = receiver.recv() {
+                storage_async.save_transaction((h, i, tx_hash)).unwrap();
+            } else {
+                utils::sleep_secs(1);
+            }
+        });
+        Arc::new(sender)
+    };
+    let screen_sender = {
+        let sent_count = screen.sent_count();
+        let sent_status = screen.sent_status();
+        let (sender, receiver) = ::crossbeam::channel::unbounded();
+        let _ = thread::spawn(move || {
+            let mut sent_cnt = 0u64;
+            let mut passed_cnt = 0u64;
+            let mut failed_cnt = 0u64;
+            loop {
+                sent_count.set_message(&format!(
+                    " Turn  : {} sent, {} passed, {} failed",
+                    sent_cnt, passed_cnt, failed_cnt
+                ));
+                if let Ok(passed) = receiver.recv() {
+                    sent_cnt += 1;
+                    if passed {
+                        passed_cnt += 1;
+                    } else {
+                        failed_cnt += 1;
+                    }
+                    sent_status.inc(1);
+                } else {
+                    utils::sleep_secs(1);
+                }
+            }
+        });
+        Arc::new(sender)
+    };
     let sent_status = screen.sent_status();
     let _ = thread::spawn(move || {
         let mut fetch_cnt = 0u64;
-        let mut sent_cnt = 0u64;
-        let mut passed_cnt = 0u64;
-        let mut failed_cnt = 0u64;
+        sent_status.set_message("Sending txs ...");
         loop {
-            sent_count.tick();
-            sent_count.set_message(&format!(
-                " Turn  : {} sent, {} passed, {} failed",
-                sent_cnt, passed_cnt, failed_cnt
-            ));
-            sent_status.tick();
-            sent_status.set_message("Fetching ...");
-            let cells = storage.fetch_unspent_cells(!0).unwrap();
+            let batch_id = storage.create_unspent_cells_batch().unwrap();
+            let cells = storage.fetch_unspent_cells(batch_id).unwrap();
             let cells_cnt = cells.len() as u64;
-            if cells_cnt < LEAST_UNSPENT_CELLS_COUNT {
-                sent_status.tick();
-                sent_status.set_message("Pausing (poor) ...");
-                utils::sleep_secs(20);
+            if cells_cnt == 0 {
+                utils::sleep_secs(5);
                 continue;
             }
             fetch_cnt += cells_cnt;
             sent_status.set_length(fetch_cnt);
-            sent_status.tick();
-            sent_status.set_message(&format!("Constructing {} txs ...", cells_cnt));
             let data = {
                 let mut data = Vec::new();
                 for (input, cap) in cells.into_iter() {
-                    sent_status.tick();
                     let output = core::transaction::CellOutput::new(
                         core::Capacity::shannons(cap),
                         bytes::Bytes::new(),
@@ -317,28 +348,12 @@ fn send_transactions(
                 }
                 data
             };
-            sent_status.set_message(&format!("Sending {} txs ...", data.len()));
-            for (h, i, t) in data.into_iter() {
-                match client.send(t) {
-                    Ok(tx_hash) => {
-                        passed_cnt += 1;
-                        storage.save_transaction((h, i, tx_hash)).unwrap();
-                        if interval > 0 {
-                            utils::sleep_millis(interval);
-                        }
-                    }
-                    Err(_) => {
-                        failed_cnt += 1;
-                    }
-                }
-                sent_status.inc(1);
-                sent_cnt += 1;
-                sent_count.tick();
-                sent_count.set_message(&format!(
-                    "Turn   : {} sent, {} passed, {} failed",
-                    sent_cnt, passed_cnt, failed_cnt
-                ));
-            }
+            async_client.send_txs(
+                data,
+                Arc::clone(&storage_sender),
+                Arc::clone(&screen_sender),
+            );
+            utils::sleep_millis(interval);
         }
     });
 }
@@ -374,7 +389,7 @@ fn check_transactions(screen: &Screen, storage: Arc<Storage>) {
                 let avg = (avg as f32) / (txs_cnt as f32) / 1000.0;
                 stats_turn.tick();
                 stats_turn.set_message(&format!(
-                    "Turn   : {} txs, cost {:.2}s, {:.2} tps, min {:.2}s, max {:.2}s, avg {:.2}s",
+                    " Turn  : {} txs, cost {:.2}s, {:.2} tps, min {:.2}s, max {:.2}s, avg {:.2}s",
                     txs_cnt, cost_secs, tps, min, max, avg
                 ));
             }
