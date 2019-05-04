@@ -119,7 +119,7 @@ pub(crate) fn build_commandline<'a>() -> App<'a, 'a> {
         .arg(
             Arg::with_name("interval")
                 .long("interval")
-                .short("i")
+                .short("t")
                 .takes_value(true)
                 .default_value("500")
                 .help("Wait interval millisecond between sending each request. 0 means no wait."),

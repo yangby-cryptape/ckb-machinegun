@@ -18,7 +18,7 @@ mod utils;
 use std::{sync::Arc, thread};
 
 use ckb_jsonrpc_client::sync::CkbClient;
-use ckb_jsonrpc_interfaces::{core, h256, types, H256};
+use ckb_jsonrpc_interfaces::{bytes, core, h256, types, H256};
 
 use client::CkbClientPlus;
 use config::{build_commandline, parse_arguments};
@@ -36,7 +36,10 @@ fn main() {
     let path = format!("{}.db", config.id);
     let interval = config.interval;
     let succ_lock = core::script::Script::new(Vec::new(), h256!("0x1"));
-    let my_lock = core::script::Script::new(vec![config.id.into_bytes()], h256!("0x1"));
+    let my_lock = core::script::Script::new(
+        vec![bytes::Bytes::from(&config.id.into_bytes()[..])],
+        h256!("0x1"),
+    );
 
     Screen::clear().unwrap();
     let client = Arc::new(CkbClient::new(&url));
@@ -297,7 +300,7 @@ fn send_transactions(
                     sent_status.tick();
                     let output = core::transaction::CellOutput::new(
                         core::Capacity::shannons(cap),
-                        Vec::new(),
+                        bytes::Bytes::new(),
                         lock.clone(),
                         None,
                     );

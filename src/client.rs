@@ -9,7 +9,7 @@
 use std::convert::TryInto;
 
 use ckb_jsonrpc_client::sync::CkbClient;
-use ckb_jsonrpc_interfaces::{core, types, OccupiedCapacity};
+use ckb_jsonrpc_interfaces::{bytes, core, types, OccupiedCapacity};
 use jsonrpc_sdk_prelude::{Error, Result};
 
 pub(crate) trait CkbClientPlus {
@@ -58,7 +58,7 @@ impl CkbClientPlus for CkbClient {
                 let (output, least_capacity) = {
                     let mut output = core::transaction::CellOutput::new(
                         core::Capacity::shannons(0),
-                        Vec::new(),
+                        bytes::Bytes::new(),
                         lock_out.clone(),
                         None,
                     );
@@ -84,7 +84,7 @@ impl CkbClientPlus for CkbClient {
                         let mut outputs = vec![output; output_size];
                         let output = core::transaction::CellOutput::new(
                             core::Capacity::shannons(remain_capacity),
-                            Vec::new(),
+                            bytes::Bytes::new(),
                             lock_in.clone(),
                             None,
                         );
