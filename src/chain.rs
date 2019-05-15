@@ -6,16 +6,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[macro_use]
-extern crate clap;
+use ckb_jsonrpc_interfaces::core;
 
-pub(crate) mod chain;
-pub(crate) mod config;
-pub(crate) mod subcmd;
+pub const SAFE_NUMBER_DISTANCE: core::BlockNumber = 10;
 
-fn main() {
-    let config = config::build_commandline();
-    match config {
-        config::AppConfig::SyncCmd(args) => subcmd::sync::execute(args),
+pub fn calculate_safe_number(tip_number: core::BlockNumber) -> Option<core::BlockNumber> {
+    if tip_number < SAFE_NUMBER_DISTANCE {
+        None
+    } else {
+        Some(tip_number - SAFE_NUMBER_DISTANCE)
     }
 }

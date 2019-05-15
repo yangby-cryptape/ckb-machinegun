@@ -1,0 +1,19 @@
+name: CKB MachineGun
+version: "0.1.0"
+about: |
+    A Machine Gun for attacking CKB through JSON-RPC.
+    (A simple benchmark tool)
+author: Boyu Yang <yangby@cryptape.com>
+
+subcommands:
+    - sync:
+        about: Synchronize chain data to local disk.
+        args:
+            - path:
+                help: Specify a directory to store chain data.
+                long: path
+                takes_value: true
+            - url:
+                help: Specify a HTTP address of a JSON-RPC server.
+                long: url
+                takes_value: true

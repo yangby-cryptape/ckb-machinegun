@@ -6,16 +6,4 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[macro_use]
-extern crate clap;
-
-pub(crate) mod chain;
-pub(crate) mod config;
-pub(crate) mod subcmd;
-
-fn main() {
-    let config = config::build_commandline();
-    match config {
-        config::AppConfig::SyncCmd(args) => subcmd::sync::execute(args),
-    }
-}
+pub(crate) mod sync;
