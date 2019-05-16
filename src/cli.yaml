@@ -25,3 +25,22 @@ subcommands:
                 help: Specify a HTTP address of a JSON-RPC server.
                 long: url
                 takes_value: true
+    - shot:
+        about: Send one transaction (one input and one output).
+        args:
+            - path:
+                help: Specify the directory which store chain data.
+                long: path
+                takes_value: true
+            - url:
+                help: Specify a HTTP address of a JSON-RPC server.
+                long: url
+                takes_value: true
+            - key-in:
+                help: Specify a secret key for input.
+                long: key-in
+                takes_value: true
+            - key-out:
+                help: Specify a secret key for output.
+                long: key-out
+                takes_value: true

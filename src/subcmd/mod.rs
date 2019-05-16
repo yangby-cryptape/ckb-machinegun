@@ -7,4 +7,5 @@
 // except according to those terms.
 
 pub(crate) mod key;
+pub(crate) mod shot;
 pub(crate) mod sync;

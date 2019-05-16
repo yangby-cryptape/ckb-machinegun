@@ -12,11 +12,13 @@ extern crate clap;
 pub(crate) mod chain;
 pub(crate) mod config;
 pub(crate) mod subcmd;
+pub(crate) mod wallet;
 
 fn main() {
     let config = config::build_commandline();
     match config {
-        config::AppConfig::SyncCmd(args) => subcmd::sync::execute(args),
-        config::AppConfig::KeyCmd(args) => subcmd::key::execute(args),
+        config::AppConfig::Sync(args) => subcmd::sync::execute(args),
+        config::AppConfig::Key(args) => subcmd::key::execute(args),
+        config::AppConfig::Shot(args) => subcmd::shot::execute(args),
     }
 }
