@@ -5,8 +5,8 @@ authors = ["Boyu Yang <yangby@cryptape.com>"]
 edition = "2018"
 
 [dependencies]
-ckb-jsonrpc-client     = { git = "https://github.com/yangby-cryptape/ckb-jsonrpc-sdk", rev = "4e1a2ad" }
-ckb-jsonrpc-interfaces = { git = "https://github.com/yangby-cryptape/ckb-jsonrpc-sdk", rev = "4e1a2ad" }
+ckb-jsonrpc-client     = { git = "https://github.com/yangby-cryptape/ckb-jsonrpc-sdk", rev = "bcbffdb" }
+ckb-jsonrpc-interfaces = { git = "https://github.com/yangby-cryptape/ckb-jsonrpc-sdk", rev = "bcbffdb" }
 jsonrpc-sdk-client  = "=0.1.4"
 jsonrpc-sdk-prelude = "=0.1.4"
 property = "~0.1"
@@ -14,3 +14,4 @@ clap = {version = "~2.33", features = ["yaml"]}
 indicatif = "~0.11"
 console = "~0.7"
 url = "~1.7"
+faster-hex = "~0.3"

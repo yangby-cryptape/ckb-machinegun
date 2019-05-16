@@ -20,8 +20,8 @@ pub(crate) fn execute(args: SyncArgs) {
     let path = args.get_path();
     let url = args.get_url();
 
-    let storage = Storage::initial(path.to_str().unwrap()).expect("failed to open storage");
-    let client = CkbSyncClient::new(url.as_str());
+    let storage = Storage::initial(path).expect("failed to open storage");
+    let client = CkbSyncClient::new(url.to_owned());
 
     let tip_number = client
         .tip_block_number()

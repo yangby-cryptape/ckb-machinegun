@@ -10,8 +10,15 @@ use std::path::PathBuf;
 
 use property::Property;
 
+use ckb_jsonrpc_interfaces::{secp256k1, H256};
+
 pub(crate) enum AppConfig {
+    KeyCmd(KeyArgs),
     SyncCmd(SyncArgs),
+}
+
+pub(crate) struct KeyArgs {
+    pub(crate) secret: Option<secp256k1::Privkey>,
 }
 
 #[derive(Property)]
@@ -29,9 +36,24 @@ pub(crate) fn build_commandline() -> AppConfig {
 impl<'a> From<&'a clap::ArgMatches<'a>> for AppConfig {
     fn from(matches: &'a clap::ArgMatches) -> Self {
         match matches.subcommand() {
+            ("key", Some(matches)) => AppConfig::KeyCmd(KeyArgs::from(matches)),
             ("sync", Some(matches)) => AppConfig::SyncCmd(SyncArgs::from(matches)),
             _ => unreachable!(),
         }
+    }
+}
+
+impl<'a> From<&'a clap::ArgMatches<'a>> for KeyArgs {
+    fn from(matches: &'a clap::ArgMatches) -> Self {
+        let secret = matches.value_of("secret").map(|secret| {
+            if secret.len() != 64 + 2 || &secret[0..2] != "0x" {
+                panic!("the format of input key is not right");
+            }
+            let secret_hash =
+                H256::from_hex_str(&secret[2..]).expect("the format of input key is not right");
+            secret_hash.into()
+        });
+        Self { secret }
     }
 }
 

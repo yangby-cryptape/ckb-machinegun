@@ -17,5 +17,6 @@ fn main() {
     let config = config::build_commandline();
     match config {
         config::AppConfig::SyncCmd(args) => subcmd::sync::execute(args),
+        config::AppConfig::KeyCmd(args) => subcmd::key::execute(args),
     }
 }

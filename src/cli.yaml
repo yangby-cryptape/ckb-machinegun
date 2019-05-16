@@ -6,6 +6,14 @@ about: |
 author: Boyu Yang <yangby@cryptape.com>
 
 subcommands:
+    - key:
+        about: Generate a new key or parse an existed key.
+        args:
+            - secret:
+                help: Provide an existed secret / private key.
+                long: secret
+                takes_value: true
+                required: false
     - sync:
         about: Synchronize chain data to local disk.
         args:
