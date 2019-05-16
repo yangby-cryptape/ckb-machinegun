@@ -17,8 +17,9 @@ pub(crate) mod wallet;
 fn main() {
     let config = config::build_commandline();
     match config {
-        config::AppConfig::Sync(args) => subcmd::sync::execute(args),
         config::AppConfig::Key(args) => subcmd::key::execute(args),
+        config::AppConfig::Tx(args) => subcmd::tx::execute(args),
+        config::AppConfig::Sync(args) => subcmd::sync::execute(args),
         config::AppConfig::Shot(args) => subcmd::shot::execute(args),
     }
 }

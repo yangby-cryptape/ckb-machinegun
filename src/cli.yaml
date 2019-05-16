@@ -14,6 +14,17 @@ subcommands:
                 long: secret
                 takes_value: true
                 required: false
+    - tx:
+        about: Display information of a transaction.
+        args:
+            - path:
+                help: Specify a directory to store chain data.
+                long: path
+                takes_value: true
+            - hash:
+                help: Specify a transaction hash.
+                long: hash
+                takes_value: true
     - sync:
         about: Synchronize chain data to local disk.
         args:

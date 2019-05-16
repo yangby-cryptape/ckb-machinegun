@@ -14,12 +14,19 @@ use ckb_jsonrpc_interfaces::{secp256k1, H256};
 
 pub(crate) enum AppConfig {
     Key(KeyArgs),
+    Tx(TxArgs),
     Sync(SyncArgs),
     Shot(ShotArgs),
 }
 
 pub(crate) struct KeyArgs {
     pub(crate) secret: Option<secp256k1::Privkey>,
+}
+
+#[derive(Property)]
+pub(crate) struct TxArgs {
+    path: PathBuf,
+    hash: H256,
 }
 
 #[derive(Property)]
@@ -46,6 +53,7 @@ impl<'a> From<&'a clap::ArgMatches<'a>> for AppConfig {
     fn from(matches: &'a clap::ArgMatches) -> Self {
         match matches.subcommand() {
             ("key", Some(matches)) => AppConfig::Key(KeyArgs::from(matches)),
+            ("tx", Some(matches)) => AppConfig::Tx(TxArgs::from(matches)),
             ("sync", Some(matches)) => AppConfig::Sync(SyncArgs::from(matches)),
             ("shot", Some(matches)) => AppConfig::Shot(ShotArgs::from(matches)),
             _ => unreachable!(),
@@ -59,6 +67,16 @@ impl<'a> From<&'a clap::ArgMatches<'a>> for KeyArgs {
             .value_of("secret")
             .map(|secret| parse_h256(&secret).into());
         Self { secret }
+    }
+}
+
+impl<'a> From<&'a clap::ArgMatches<'a>> for TxArgs {
+    fn from(matches: &'a clap::ArgMatches) -> Self {
+        let path = value_t!(matches, "path", PathBuf).unwrap_or_else(|e| e.exit());
+        let hash = value_t!(matches, "hash", String)
+            .map(|ref x| parse_h256(x))
+            .unwrap_or_else(|e| e.exit());
+        Self { path, hash }
     }
 }
 
