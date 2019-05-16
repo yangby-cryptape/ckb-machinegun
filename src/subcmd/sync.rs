@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
 
 use ckb_jsonrpc_client::{
@@ -30,11 +29,6 @@ pub(crate) fn execute(args: SyncArgs) {
     let mut start_number = storage.select_max_number().unwrap().unwrap_or(0);
 
     if start_number < safe_number {
-        Term::stdout()
-            .clear_screen()
-            .and_then(|_| Term::stderr().clear_screen())
-            .expect("failed to clear screen");
-
         let pb = ProgressBar::new(safe_number);
         pb.set_position(start_number);
         let style = ProgressStyle::default_bar()
